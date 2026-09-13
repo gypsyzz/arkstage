@@ -2,6 +2,8 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { PROXY_BASE, discoverAssetDomains, proxyUrl, rewriteAllCdnUrls } from "./proxy";
 import { captureIframe, pushLog } from "./debugLog";
 import { scenarioLinkOverrides, type ScenarioLinkOverride } from "./BookshelfMetadataContext";
+import { bootStoryPlayer } from "./storyPlayerBoot";
+import type { StoryPlayerSnapshot } from "./storyPlayerAdapter";
 
 /**
  * Boots the original PRTS ScenarioSimulator engine inside an ISOLATED <iframe>
@@ -17,6 +19,7 @@ import { scenarioLinkOverrides, type ScenarioLinkOverride } from "./BookshelfMet
  */
 
 export interface WidgetBundle {
+  story_player?: StoryPlayerSnapshot;
   dom_html: string;
   data_blocks_html: string;
   engine_scripts: string[];
@@ -115,6 +118,7 @@ export function refreshEngineDeps(): Promise<string> {
 }
 
 export async function bootEngineInFrame(opts: FrameBootOptions): Promise<FrameBootResult> {
+  if (opts.bundle.story_player) return bootStoryPlayer(opts);
   const { iframe, bundle, script, title, mode } = opts;
   const isCancelled = opts.isCancelled ?? (() => false);
   const play = mode === "play";

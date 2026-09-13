@@ -45,7 +45,7 @@ async function fetchRetry(url, init = {}) {
     try {
       const response = await fetch(url, {
         ...init,
-        headers: { Referer: "https://prts.wiki/", "User-Agent": "Arkstage-sync-check/1", ...init.headers },
+        headers: { Referer: "https://prts.wiki/", "User-Agent": "Arkstage-sync-check/1 (+https://github.com/djkcyl/arkstage)", ...init.headers },
         signal: AbortSignal.timeout(30_000),
       });
       if (response.ok) return response;

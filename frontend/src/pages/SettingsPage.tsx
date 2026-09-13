@@ -11,6 +11,7 @@ import { useCompression } from "../lib/CompressionContext";
 import type { Tier, CompressEstimate } from "../lib/CompressionContext";
 import type { StoryIndex } from "../hooks/useStoryIndex";
 import { collectEnvInfo, copyText } from "../lib/diagnostics";
+import { confirmAction } from "../lib/dialogs";
 
 interface CacheStatus {
   story_index_cached: boolean;
@@ -145,7 +146,7 @@ export default function SettingsPage() {
 
   // Cache the assets of EVERY story in the index (one big background download).
   const cacheAllStories = async () => {
-    if (!confirm("将缓存全部剧情的资源，可能占用大量存储与流量，确定开始？")) return;
+    if (!await confirmAction("将缓存全部剧情的资源，可能占用大量存储与流量，确定开始？")) return;
     setBusy(true);
     showMsg("正在获取剧情目录...", 0);
     try {
@@ -163,7 +164,7 @@ export default function SettingsPage() {
   };
 
   const clearAllCache = async () => {
-    if (!confirm("确认清除所有缓存数据？（会清除热更新引擎与剧情资源；下次联网时自动重建，离线时使用软件内应急副本）")) return;
+    if (!await confirmAction("确认清除所有缓存数据？（会清除热更新引擎与剧情资源；下次联网时自动重建，离线时使用软件内应急副本）")) return;
     try {
       await invoke("clear_cache");
       showMsg("缓存已清除");

@@ -184,7 +184,7 @@ pub async fn fetch_story_page(page_title: String) -> Result<StoryPageData, Strin
 #[tauri::command]
 pub async fn fetch_widget_bundle(page_title: String) -> Result<WidgetBundleData, String> {
     let html = fetch_page_raw(&page_title).await?;
-    widget_from_html(&html)
+    runtime_widget(&html).await
 }
 
 /// Fetch the script and engine/data snapshot from one rendered page response.
@@ -194,13 +194,20 @@ pub async fn fetch_story_runtime(page_title: String) -> Result<StoryRuntimeData,
     let html = fetch_page_raw(&page_title).await?;
     let story = story_page::extract_story_script_for(&html, Some(&page_title))
         .ok_or_else(|| format!("No story script found on page: {}", page_title))?;
-    let bundle = widget_from_html(&html)?;
+    let bundle = runtime_widget(&html).await?;
     let revision = sha256_parts(&[story.script.as_bytes(), bundle.revision.as_bytes()]);
     Ok(StoryRuntimeData {
         story,
         bundle,
         revision,
     })
+}
+
+async fn runtime_widget(html: &str) -> Result<WidgetBundleData, String> {
+    if let Some(bundle) = super::story_player::from_html(html).await? {
+        return Ok(bundle);
+    }
+    widget_from_html(html)
 }
 
 fn widget_from_html(html: &str) -> Result<WidgetBundleData, String> {
@@ -292,6 +299,7 @@ fn widget_from_html(html: &str) -> Result<WidgetBundleData, String> {
 
     let engine_script_count = bundle.engine_scripts.len();
     Ok(WidgetBundleData {
+        story_player: None,
         dom_html: bundle.dom_html,
         data_blocks_html: bundle.data_blocks_html,
         engine_scripts: bundle.engine_scripts,
@@ -334,15 +342,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(runtime.revision.len(), 64);
-        assert!(runtime.bundle.diagnostics.character_entries > 100);
-        assert!(runtime
-            .bundle
-            .data_blocks_html
-            .contains("avg_4229_aphris_1-1$2"));
-        assert!(runtime
-            .bundle
-            .data_blocks_html
-            .contains("bg_75_mini01_plantation"));
+        if let Some(player) = &runtime.bundle.story_player {
+            assert!(player.modules.len() > 5);
+            assert_eq!(player.data.len(), 3);
+        } else {
+            assert!(runtime.bundle.diagnostics.character_entries > 100);
+        }
+        if let Ok(path) = std::env::var("PRTS_RUNTIME_OUTPUT") {
+            std::fs::write(path, serde_json::to_vec(&runtime).unwrap()).unwrap();
+        }
     }
 
     #[test]

@@ -56,15 +56,10 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
 
-      # Cross-platform native deps (npm/cli#4828): package-lock.json (linux-x64) only
-      # carries linux-x64 native binaries, so npm ci / npm install both leave the
-      # @tauri-apps/cli platform binary missing on macOS/Windows → "Cannot find native
-      # binding" at `tauri build`. Drop the incomplete lockfile and resolve fresh.
-      # `shell: bash` so `rm -f` also works on the Windows runner (default shell is
-      # PowerShell, whose `rm` is Remove-Item and rejects `-f`).
-      - name: Install dependencies (fresh resolve for cross-platform native deps)
+      # Use the repaired cross-platform lockfile tested for this release.
+      - name: Install dependencies (locked)
         shell: bash
-        run: rm -f package-lock.json && npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Build and publish to the release
         uses: tauri-apps/tauri-action@v0
@@ -77,7 +72,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "方舟剧场 ${{ github.ref_name }}"
           releaseBody: "从下方 Assets 下载对应平台的安装包。"
-          releaseDraft: false
+          releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.args }}
 
@@ -121,10 +116,9 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
 
-      # Same cross-platform native-dep fix as the desktop job (npm/cli#4828).
-      - name: Install dependencies (fresh resolve for cross-platform native deps)
+      - name: Install dependencies (locked)
         shell: bash
-        run: rm -f package-lock.json && npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       # Restore the signing keystore from a secret when present. Unset → the Gradle
       # release type falls back to debug signing (build.gradle.kts), so the APK
@@ -168,5 +162,27 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          draft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: dist-apk/*.apk
+
+  publish:
+    name: Publish complete release
+    needs: [release, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish release notes and installers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          IS_PRERELEASE: ${{ contains(github.ref_name, '-') }}
+        run: |
+          notes="docs/releases/$RELEASE_TAG.md"
+          if [ ! -f "$notes" ]; then
+            printf '%s\n' '从下方 Assets 下载对应平台的安装包。' > "$RUNNER_TEMP/release-notes.md"
+            notes="$RUNNER_TEMP/release-notes.md"
+          fi
+          latest=true
+          if [ "$IS_PRERELEASE" = true ]; then latest=false; fi
+          gh release edit "$RELEASE_TAG" --draft=false --latest="$latest" --notes-file "$notes"

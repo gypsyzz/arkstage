@@ -11,6 +11,7 @@ import CoverCard from "../components/CoverCard";
 import ChapterDetail from "../components/ChapterDetail";
 import SelectionBar from "../components/SelectionBar";
 import { storylineIcon } from "../assets/storylines";
+import { confirmAction, showNotice } from "../lib/dialogs";
 
 /**
  * Cinematic ebook bookshelf. Categories become shelf sections; chapters sharing
@@ -185,7 +186,7 @@ export default function StoryBrowserPage() {
     // reading an uncached story would fetch + write media that the batch is
     // simultaneously transcoding. Downloads are gated for the same reason.
     if (compressionBusy) {
-      alert("正在压缩资源，请等待压缩完成后再阅读剧情。");
+      void showNotice("正在压缩资源，请等待压缩完成后再阅读剧情。");
       return;
     }
     navigate(`/play/${encodeURIComponent(pageTitle)}`);
@@ -198,17 +199,17 @@ export default function StoryBrowserPage() {
   // these stories, so other cached chapters stay intact.
   const deleteTitles = async (titles: string[], label: string, after?: () => void) => {
     if (titles.length === 0) return;
-    if (!confirm(`确认删除「${label}」的本地缓存？\n（仅删除其独有的资源，与其他章节共享的不受影响）`)) return;
+    if (!await confirmAction(`确认删除「${label}」的本地缓存？\n（仅删除其独有的资源，与其他章节共享的不受影响）`)) return;
     try {
       const r = await invoke<{ freedBytes: number; deletedFiles: number; storiesCleared: number }>(
         "delete_chapter_cache",
         { titles }
       );
-      alert(`已清理「${label}」：${r.storiesCleared} 个剧情，释放 ${fmtSize(r.freedBytes)}`);
+      await showNotice(`已清理「${label}」：${r.storiesCleared} 个剧情，释放 ${fmtSize(r.freedBytes)}`);
       refreshCached();
       after?.();
     } catch (e) {
-      alert(`删除失败：${e instanceof Error ? e.message : String(e)}`);
+      await showNotice(`删除失败：${e instanceof Error ? e.message : String(e)}`);
     }
   };
 

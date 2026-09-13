@@ -4,6 +4,8 @@ import { bootEngineInFrame, prewarmEngineDeps, refreshEngineDeps } from "./engin
 import type { WidgetBundle } from "./engineBoot";
 import { setManifestProgress } from "./keepalive";
 import { pushLog } from "./debugLog";
+import { validateStoryPlayer } from "./storyPlayerAdapter";
+import { disposeEngineFrame } from "./storyPlayerBoot";
 
 /**
  * Predownload status. Indexing (manifest) and downloading run CONCURRENTLY now
@@ -92,7 +94,7 @@ export function loadBundle(): Promise<WidgetBundle> {
 async function refreshBundle(): Promise<WidgetBundle> {
   let cached: WidgetBundle | null = null;
   try {
-    for (const key of ["widget-bundle-v5", "widget-bundle-v4", "widget-bundle-v3", "widget-bundle-v2"]) {
+    for (const key of ["widget-bundle-v6", "widget-bundle-v5", "widget-bundle-v4", "widget-bundle-v3", "widget-bundle-v2"]) {
       const raw = await invoke<string | null>("load_from_cache", { key });
       if (!raw) continue;
       const candidate = JSON.parse(raw) as WidgetBundle;
@@ -114,15 +116,15 @@ async function refreshBundle(): Promise<WidgetBundle> {
     }
     await validateBundleBoot(fresh, "W2G/BEG");
     await invoke("save_to_cache", {
-      key: "widget-bundle-v5",
+      key: "widget-bundle-v6",
       data: JSON.stringify(fresh),
     }).catch(() => {});
-    await refreshEngineDeps();
+    if (!fresh.story_player) await refreshEngineDeps();
     return fresh;
   } catch (error) {
     if (cached) {
       pushLog("warn", "[runtime-update] PRTS 候选引擎验证失败，保留上次可用版本:", error);
-      await refreshEngineDeps();
+      if (!cached.story_player) await refreshEngineDeps();
       return cached;
     }
     throw error;
@@ -130,6 +132,13 @@ async function refreshBundle(): Promise<WidgetBundle> {
 }
 
 function isSuspiciousRegression(fresh: WidgetBundle, cached: WidgetBundle): boolean {
+  if (fresh.story_player) {
+    const previous = cached.story_player;
+    // The old and new engine use different tables; compare only modern peers.
+    return !!previous && Object.entries(previous.data).some(([url, data]) =>
+      Object.keys(fresh.story_player!.data[url] ?? {}).length < Object.keys(data).length * 0.8);
+  }
+  if (cached.story_player) return true; // Never silently downgrade a migrated installation.
   const a = fresh.diagnostics;
   const b = cached.diagnostics;
   if (!a || !b) return false;
@@ -155,11 +164,11 @@ export function loadStoryRuntime(title: string): Promise<StoryRuntime> {
 }
 
 async function refreshStoryRuntime(title: string): Promise<StoryRuntime> {
-  const key = `story-runtime-v5_${title.replace(/\//g, "_")}`;
+  const key = `story-runtime-v6_${title.replace(/\//g, "_")}`;
   const previousKey = `${key}-previous`;
   let cached: RawStoryRuntime | null = null;
   try {
-    for (const cacheKey of [key, previousKey, `story-runtime-v4_${title.replace(/\//g, "_")}`]) {
+    for (const cacheKey of [key, previousKey, `story-runtime-v5_${title.replace(/\//g, "_")}`, `story-runtime-v4_${title.replace(/\//g, "_")}`]) {
       const raw = await invoke<string | null>("load_from_cache", { key: cacheKey });
       if (!raw) continue;
       const candidate = JSON.parse(raw) as RawStoryRuntime;
@@ -183,12 +192,12 @@ async function refreshStoryRuntime(title: string): Promise<StoryRuntime> {
       await invoke("save_to_cache", { key: previousKey, data: JSON.stringify(cached) }).catch(() => {});
     }
     await invoke("save_to_cache", { key, data: JSON.stringify(fresh) }).catch(() => {});
-    await refreshEngineDeps();
+    if (!fresh.bundle.story_player) await refreshEngineDeps();
     return { ...fresh, source: "live", fallback: cached ?? undefined };
   } catch (error) {
     if (cached) {
       pushLog("warn", `[runtime-update] ${title}: 候选快照验证失败，自动回退`, error);
-      await refreshEngineDeps();
+      if (!cached.bundle.story_player) await refreshEngineDeps();
       return { ...cached, source: "cache", warning: String(error) };
     }
     // Upgrade path: preserve old v1.1.x script cache when the first v3 sync is
@@ -214,6 +223,7 @@ const REQUIRED_DATA_BLOCKS = ["datas_txt", "datas_back", "datas_char", "datas_au
 const REQUIRED_ENGINE_CAPABILITIES = ["Timer", "system", "data.init", "fun_sys_init", "fun_sys_preload", "window.onload"];
 
 export function validateBundleShape(bundle: WidgetBundle): string[] {
+  if (bundle?.story_player) return validateStoryPlayer(bundle.story_player);
   const problems: string[] = [];
   if (!bundle || !Array.isArray(bundle.engine_scripts)) return ["快照格式无效"];
   const diagnostics = bundle.diagnostics;
@@ -281,6 +291,7 @@ async function validateCandidateBoot(bundle: WidgetBundle, script: string, title
       throw new Error("候选引擎未能完成预加载资源解析");
     }
   } finally {
+    disposeEngineFrame(iframe);
     iframe.remove();
   }
 }
@@ -359,6 +370,7 @@ export async function captureManifest(
     }
     return manifest ?? [];
   } finally {
+    disposeEngineFrame(iframe);
     iframe.remove();
   }
 }
@@ -557,8 +569,8 @@ export async function runPredownload(
     const bundle = await loadBundle();
     // Cache the engine deps once up-front (via Rust) so the parallel iframe boots
     // below all load jQuery/PreloadJS/toolbox from disk instead of the network.
-    await prewarmEngineDeps();
-    const engineAssetsRevision = await refreshEngineDeps();
+    if (!bundle.story_player) await prewarmEngineDeps();
+    const engineAssetsRevision = bundle.story_player ? "story-player-v1" : await refreshEngineDeps();
     const runtimeRevision = `${bundle.revision || "legacy"}|${engineAssetsRevision}`;
     let pageRevisions: Record<string, string> = {};
     try {

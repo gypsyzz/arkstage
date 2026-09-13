@@ -55,6 +55,8 @@ pub struct CacheStatus {
 /// The original widget engine bundle: DOM + data blocks + inline scripts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WidgetBundleData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub story_player: Option<StoryPlayerBundle>,
     pub dom_html: String,
     pub data_blocks_html: String,
     pub engine_scripts: Vec<String>,
@@ -63,6 +65,18 @@ pub struct WidgetBundleData {
     pub revision: String,
     #[serde(default)]
     pub diagnostics: WidgetDiagnostics,
+}
+
+/// A complete ES-module graph and the mutable sidecars used by StoryPlayer.
+/// Stored with the runtime so offline playback never mixes data generations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoryPlayerBundle {
+    pub entry: String,
+    #[serde(default)]
+    pub prelude: Vec<String>,
+    pub modules: std::collections::BTreeMap<String, String>,
+    pub styles: std::collections::BTreeMap<String, String>,
+    pub data: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

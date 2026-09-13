@@ -8,6 +8,7 @@ import { markRead, setLastWatched } from "../lib/readState";
 import { setLandscape } from "../lib/orientation";
 import { setImmersive } from "../lib/immersive";
 import { useHidePlayerBack } from "../lib/uiSettings";
+import { disposeEngineFrame } from "../lib/storyPlayerBoot";
 
 /**
  * Story player page — loads the ORIGINAL PRTS ScenarioSimulator engine via bootEngine().
@@ -98,6 +99,7 @@ export default function StoryPlayerPage() {
           setSyncWarning(
             `PRTS 最新演出引擎启动失败，已自动切换到上一可用版本。\n${candidateError instanceof Error ? candidateError.message : String(candidateError)}`
           );
+          disposeEngineFrame(iframe);
           iframe.remove();
           const fallbackFrame = document.createElement("iframe");
           fallbackFrame.style.cssText = "width:100%;height:100%;border:0;display:block;background:#000;";
@@ -129,6 +131,7 @@ export default function StoryPlayerPage() {
       cancelled = true;
       // Removing the iframe disposes the whole engine realm (timers, audio, globals).
       try {
+        container.querySelectorAll("iframe").forEach(disposeEngineFrame);
         container
           .querySelector("iframe")
           ?.contentDocument?.querySelectorAll("#sys_audio audio")

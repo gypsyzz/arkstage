@@ -55,7 +55,32 @@ downloaded or already cached with zero failures.
 
 Screenshots are written to `/tmp/prts-e2e/` (`01_home` … `05_story_b_loaded`).
 
-## Requirements / caveats
+## StoryPlayer integration (Windows / macOS / Linux)
+
+Export a current snapshot through the application's actual Rust transport (create
+the output directory first; set the two environment variables using your shell):
+
+```bash
+PRTS_LIVE_NETWORK=1 PRTS_RUNTIME_OUTPUT="$PWD/build/runtime.json" cargo test --manifest-path src-tauri/Cargo.toml live_story_runtime
+PRTS_RUNTIME_OUTPUT="$PWD/build/runtime.json" npm run test:storyplayer
+node scripts/test-storyplayer-browser.mjs build/runtime.json
+```
+
+Visit `http://localhost:5174/__storyplayer-test`. **Verify full story manifest**
+boots the complete exported story with networking disabled and writes canonical
+URLs to `build/prts-inspect/manifest.json`. **Play online** exercises a small
+background/character/dialogue sample. **Reopen offline** creates a fresh iframe
+using disk media cache; verify that the network counter stays unchanged and that
+the Continue control changes the portrait/dialogue. **Failure probe** injects
+missing images and must return a boot error; **Dispose** tests teardown.
+The harness applies the app's CSP and substitutes only the local media transport;
+it does not modify the user's installed app cache. Native Tauri packaging and
+device-specific rendering still need platform smoke tests.
+
+The legacy `verify:prts-sync` script checks ScenarioSimulator tables; it does not
+validate StoryPlayer's new asset routes or module loader.
+
+## Legacy Linux requirements / caveats
 
 - Tools: `Xvfb`, `xdotool`, ImageMagick (`import`, `convert`), `npm`, a built Rust toolchain (`cargo`).
 - `test-e2e.sh` clears `~/.local/share/cn.aunly.arkstage/{cache,media,assets}` for a deterministic run.

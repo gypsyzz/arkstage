@@ -19,6 +19,20 @@ resources@GitHub ─jsDelivr/GitHub Raw─▶ 书架元数据/封面    图片�
 
 更详细的设计见 [`docs/superpowers/specs`](superpowers/specs) 与 [`docs/superpowers/plans`](superpowers/plans)；架构约定见仓库根 [`CLAUDE.md`](../CLAUDE.md)。
 
+## StoryPlayer 新版引擎（2026-09）
+
+PRTS 当前同时嵌入旧版 ScenarioSimulator 与新版 StoryPlayer。后端优先识别页面的 `StoryPlayer.<hash>.js` 入口，递归抓取完整模块图、页面样式及 Torappu 的 `character.json`、`background.json`、`story_variables.json`；不依赖旧版 DOM 或 `datas_back/datas_link`。同一应用会话只刷新一次相同引擎版本，失败不缓存。完整数据参与 SHA-256，随 v6 运行时快照保存，离线时不请求可变数据表。
+
+前端在独立 iframe 中通过 import map 加载缓存的模块图，保留模块循环依赖、延迟导入和资源 URL 的原始基址。`storyPlayerAdapter.ts` 从源程序结构识别上游的 context、manifest 与 Vue mount 入口，接口变化或模块缺失会阻止快照升级。新版清单使用上游 `collectContextAssetManifest`，另补字体和 UI 纹理；图片 Worker、直接设置 src 的图片 / 音视频以及 fetch 都经过本地媒体代理。可见模式等待预加载完成并实际开始播放后才算启动成功。切换剧情时卸载 Vue 应用、销毁播放器并回收模块 Blob URL。
+
+v5 及更早缓存仍由旧版引擎启动；不把旧资源表数量与新版表比较，也不自动把新版快照降级成源站的旧版引擎。已有剧情媒体保留，但新版采用不同资源 URL，升级后应重新预下载需要离线观看的剧情。
+
+桌面及移动 WebView 使用 WebGL 渲染：适配器只改写上游 Pixi 初始化参数中的 `preference: "webgpu"`，避开当前 WebGPU 批次缓存对已销毁纹理的残留绑定，保留原始资源错误日志。Vue 卸载钩子负责销毁播放器，不再额外重复调用 `player.destroy()`。
+
+原生提示统一使用 `dialogs.ts` 封装的异步插件 API；确认结果必须 `await`，弹窗失败视为取消，避免旧版 `window.confirm` 桥接调用已移除的 `dialog.confirm` 命令。
+
+运行 `npm run test:storyplayer` 验证接口适配、模块依赖与离线资源补全，`npm run test:dialogs` 验证确认、取消和弹窗失败的处理。真实源站和浏览器验证步骤见 [`scripts/README.md`](../scripts/README.md)。原 `verify:prts-sync` 仍审计源站保留的旧版表，不能代替新版的浏览器验证。
+
 ## 环境要求
 
 - **Node.js** ≥ 18（推荐 20+）
