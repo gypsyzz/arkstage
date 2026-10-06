@@ -22,7 +22,25 @@ createApp(Component,{script}).mount(root);`;
   assert.equal(typeof realm.window.__arkstageVueApp.unmount, "function");
   assert.equal(realm.window.rendererOptions.preference, "webgl");
   assert.equal(realm.window.rendererOptions.antialias, true);
+  assert.equal(realm.window.__arkstageAPI.collectManifest({ charMap: {} }).urls.length, 0);
   assert.throws(() => adaptStoryPlayerEntry(source.replace("backgroundPpuMap", "futureFormat")), /接口发生变化/);
+});
+
+test("exports the manifest wrapper that supplies parsed lines to the internal builder", async () => {
+  const source = `
+async function renamedContext(script){return {scriptText:script,audioVariables:{},backgroundPpuMap:{}}}
+function buildManifest(context,n){const unused=context.charMap;const urls=[];for(const line of n)urls.push(line.url);return {faceAssets:[],urls:urls}}
+function parseContextScript(context){return context.scriptText.split('\\n').map(url=>({url}))}
+function renamedManifest(context){return buildManifest(context,parseContextScript(context))}
+function createApp(){return {mount(){}}}
+const Component={},script='hello',root={};createApp(Component,{script}).mount(root);`;
+  const realm = { window: {} };
+  vm.runInNewContext(adaptStoryPlayerEntry(source), realm);
+  const urls = ["https://static.prts.wiki/background.png", "https://static.prts.wiki/character.png"];
+  const context = await realm.window.__arkstageAPI.loadContext(urls.join("\n"));
+  assert.deepEqual(Array.from(realm.window.__arkstageAPI.collectManifest(context).urls), urls);
+  assert.throws(() => adaptStoryPlayerEntry(source.replace("function renamedManifest(context)", "function renamedManifest(context, lines)")), /manifest 接口发生变化/);
+  assert.throws(() => adaptStoryPlayerEntry(source + "function duplicate(context){return buildManifest(context,[])}"), /manifest 接口发生变化/);
 });
 
 test("preserves cyclic/static/lazy imports and asset base without changing literals", async () => {

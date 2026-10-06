@@ -43,6 +43,13 @@ export function adaptStoryPlayerEntry(source: string): string {
     return /\bfaceAssets\s*:/.test(body) && /\burls\s*:/.test(body) && body.includes("charMap");
   });
   if (context.length !== 1 || manifest.length !== 1) throw new Error("StoryPlayer context/manifest 接口发生变化");
+  // Newer players split collection into a builder(context, parsedLines) and a
+  // one-argument wrapper. Export the wrapper so upstream still parses the script.
+  const collectManifest = manifest[0].params.length === 1 ? manifest : functions.filter((node) =>
+    node.params.length === 1 && node.body.body.some((statement) =>
+      statement.type === "ReturnStatement" && statement.argument?.type === "CallExpression"
+      && statement.argument.callee.type === "Identifier" && statement.argument.callee.name === manifest[0].id!.name));
+  if (collectManifest.length !== 1) throw new Error("StoryPlayer manifest 接口发生变化");
   let mount: { start: number; end: number; replacement: string } | undefined;
   const edits: Array<{ start: number; end: number; replacement: string }> = [];
   // Generic traversal keeps this adapter independent of Acorn's optional walker.
@@ -86,7 +93,7 @@ export function adaptStoryPlayerEntry(source: string): string {
   let adapted = source;
   for (const edit of edits.sort((a, b) => b.start - a.start))
     adapted = adapted.slice(0, edit.start) + edit.replacement + adapted.slice(edit.end);
-  return adapted + `\nwindow.__arkstageAPI={loadContext:${context[0].id!.name},collectManifest:${manifest[0].id!.name}};`;
+  return adapted + `\nwindow.__arkstageAPI={loadContext:${context[0].id!.name},collectManifest:${collectManifest[0].id!.name}};`;
 }
 
 /** Normalize imports before blob loading; the import map preserves cycles and

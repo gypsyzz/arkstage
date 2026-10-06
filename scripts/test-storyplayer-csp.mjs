@@ -30,7 +30,9 @@ async function loadContext(script) {
   if (!window.preludeLoaded || lazy.shared !== shared || shared.value() !== 42) throw Error('module graph broken');
   return { scriptText: script, audioVariables: {}, backgroundPpuMap: {}, linkMap: Object.fromEntries(Array.from({length:100}, (_,i) => [i, {}])) };
 }
-function collectManifest(context) { const ignored = context.charMap; return { faceAssets: [], urls: ['https://static.prts.wiki/scene.png'] }; }
+function buildManifest(context, lines) { const ignored = context.charMap; const urls = []; for (const line of lines) urls.push(line.url); return { faceAssets: [], urls: urls }; }
+function parseContextScript(context) { return context.scriptText.split('\\n').map(() => ({ url: 'https://static.prts.wiki/scene.png' })); }
+function collectManifest(context) { return buildManifest(context, parseContextScript(context)); }
 function createApp(component, props) { return { unmount() {}, mount() { return { getPlayer: () => ({ getState: () => 'playing' }) }; } }; }
 const Component = {}, script = 'test', root = document.getElementById('root');
 createApp(Component, {script}).mount(root);`,
