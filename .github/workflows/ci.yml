@@ -125,6 +125,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools # The legacy 'tools' package is no longer available.
 
       - name: Install NDK + platform/build-tools, export NDK env
         run: |
