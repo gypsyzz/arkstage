@@ -57,6 +57,18 @@ Screenshots are written to `/tmp/prts-e2e/` (`01_home` … `05_story_b_loaded`).
 
 ## StoryPlayer integration (Windows / macOS / Linux)
 
+Run the offline CSP regression with an installed Chromium/Chrome executable:
+
+```bash
+CHROME_BIN=/path/to/chrome node scripts/test-storyplayer-csp.mjs
+```
+
+This uses the real loader with a synthetic cached module graph and Tauri's
+packaged nonce policy. It checks manifest capture, playback, reopening, cyclic
+and lazy imports, and that unsigned inline scripts remain blocked. The parent
+page's `__TAURI_SCRIPT_NONCE__` placeholder is replaced as Tauri does when serving
+the packaged HTML; the iframe's import map reuses that authorized nonce.
+
 Export a current snapshot through the application's actual Rust transport (create
 the output directory first; set the two environment variables using your shell):
 

@@ -97,6 +97,9 @@ export async function bootStoryPlayer(opts: FrameBootOptions): Promise<FrameBoot
     if (cancelled()) { win.__arkstageDispose(); return {}; }
     const map = doc.createElement("script");
     map.type = "importmap";
+    // The iframe inherits Tauri's CSP, where hashes/nonces disable unsafe-inline.
+    // Read .nonce: browsers hide the attribute value from getAttribute().
+    map.nonce = opts.iframe.ownerDocument.querySelector<HTMLMetaElement>('meta[property="csp-nonce"]')?.nonce ?? "";
     map.textContent = JSON.stringify({ imports });
     doc.head.appendChild(map);
     if (opts.mode === "play") {
