@@ -33,13 +33,22 @@ async function loadContext(script) {
 function buildManifest(context, lines) { const ignored = context.charMap; const urls = []; for (const line of lines) urls.push(line.url); return { faceAssets: [], urls: urls }; }
 function parseContextScript(context) { return context.scriptText.split('\\n').map(() => ({ url: 'https://static.prts.wiki/scene.png' })); }
 function collectManifest(context) { return buildManifest(context, parseContextScript(context)); }
-function createApp(component, props) { return { unmount() {}, mount() { return { getPlayer: () => ({ getState: () => 'playing' }) }; } }; }
+function createApp(component, props) { return { unmount() {}, mount(root) {
+  root.innerHTML = '<main class="story-player"><section><div class="bg-black"><div class="host"><canvas width="1280" height="720"></canvas></div></div></section><div class="n-card" aria-label="播放控制"><button>自动</button></div></main>';
+  return { getPlayer: () => ({ getState: () => 'playing' }) };
+} }; }
 const Component = {}, script = 'test', root = document.getElementById('root');
 createApp(Component, {script}).mount(root);`,
     [base + "common.test.js"]: "import { entryValue } from './StoryPlayer.test.js'; export const shared = { value: entryValue };",
     [base + "lazy.test.js"]: "export { shared } from './common.test.js';",
   },
-  styles: { [base + "style.test.css"]: "body { margin: 0 }" },
+  styles: { [base + "style.test.css"]: `
+    .story-player{box-sizing:border-box;display:flex;flex-direction:column;align-items:center;width:100%;min-height:100%;padding:24px;gap:14px}
+    .story-player>section{position:relative;width:100%;overflow:hidden;aspect-ratio:16/9;max-width:1280px}
+    .story-player>section>.bg-black{position:absolute;inset:0}
+    .host,canvas{width:100%;height:100%}canvas{display:block}
+    .n-card{width:100%;height:148px;background:#fff}
+  ` },
   data: Object.fromEntries([
     "https://torappu.prts.wiki/assets/avg/character.json",
     "https://torappu.prts.wiki/assets/avg/background.json",
@@ -60,6 +69,24 @@ try {
       const result = await boot;
       if (result.health.engineScriptCount !== 4) throw Error('incomplete module graph');
       if (mode === 'manifest' && !result.manifest.includes('https://static.prts.wiki/scene.png')) throw Error('invalid manifest');
+      if (mode === 'play') {
+        const toggle = iframe.contentDocument.querySelector('.arkstage-controls-toggle');
+        const controls = iframe.contentDocument.querySelector('.story-player>.n-card');
+        if (!toggle || toggle.getAttribute('aria-expanded') !== 'false') throw Error('controls should start collapsed');
+        for (const [width, height] of [[1280,579], [1280,720], [800,1000]]) {
+          iframe.style.cssText = 'border:0;width:' + width + 'px;height:' + height + 'px';
+          for (const expanded of [false, true, false]) {
+            if (toggle.getAttribute('aria-expanded') !== String(expanded)) toggle.click();
+            const visible = iframe.contentWindow.getComputedStyle(controls).display !== 'none';
+            if (visible !== expanded || toggle.getAttribute('aria-expanded') !== String(expanded)) throw Error('controls toggle failed');
+            const rect = iframe.contentDocument.querySelector('canvas').getBoundingClientRect();
+            if (!rect.height || Math.abs(rect.width / rect.height - 16 / 9) > 0.002) throw Error('distorted picture at ' + width + 'x' + height);
+            if (rect.left < -1 || rect.top < -1 || rect.right > width + 1 || rect.bottom > height + 1) throw Error('cropped picture');
+            const available = height - (visible ? controls.getBoundingClientRect().height : 0);
+            if (Math.abs(rect.height - Math.min(available, width * 9 / 16)) > 1) throw Error('picture does not fill available space');
+          }
+        }
+      }
       if (violations.length) throw Error('CSP violations: ' + violations.join(', '));
     } finally {
       disposeEngineFrame(iframe);
@@ -98,7 +125,7 @@ try {
   ], { timeout: 30_000, maxBuffer: 1024 * 1024 });
   const result = stdout.match(/<pre id="result">([^<]*)<\/pre>/)?.[1];
   assert.equal(result, "PASS");
-  console.log("PASS: packaged CSP, manifest/play/reopen, cyclic/lazy/shared imports");
+  console.log("PASS: packaged CSP, manifest/play/reopen, cyclic/lazy/shared imports, 16:9 layout and controls toggle");
 } finally {
   await server.close();
   await rm(profile, { recursive: true, force: true });

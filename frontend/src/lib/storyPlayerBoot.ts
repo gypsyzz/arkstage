@@ -109,12 +109,16 @@ export async function bootStoryPlayer(opts: FrameBootOptions): Promise<FrameBoot
           (_all, _quote, path: string) => `url(${JSON.stringify(new URL(path, url).href)})`), domains);
         doc.head.appendChild(style);
       }
+      // Keep the canvas and its click targets together in a fitted 16:9 frame.
       const layout = doc.createElement("style");
       layout.textContent = `html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
         .story-player{height:100dvh!important;padding:0!important;gap:0!important}
-        .story-player>section{flex:1;min-height:0;max-width:none!important;aspect-ratio:auto!important}
-        .story-player>.n-card{flex:none;max-width:none!important;border-radius:0}
-        .story-player .n-card__content{padding:6px 10px!important}`;
+        .story-player>section{flex:1;min-height:0;max-width:none!important;aspect-ratio:auto!important;container-type:size;display:flex;align-items:center;justify-content:center}
+        .story-player>section>.bg-black{position:relative;inset:auto;width:min(100cqw,calc(100cqh * 16 / 9));height:min(100cqh,calc(100cqw * 9 / 16))}
+        .story-player>.n-card{flex:none;max-width:none!important;max-height:40dvh;overflow:auto;border-radius:0}
+        body:not(.arkstage-controls-open) .story-player>.n-card{display:none}
+        .story-player .n-card__content{padding:6px 10px!important}
+        .arkstage-controls-toggle{position:fixed;top:6px;right:max(6px,env(safe-area-inset-right));z-index:20;min-height:44px;padding:6px 10px;border:1px solid #ffffff38;border-radius:6px;background:#0009;color:#fff;font:14px sans-serif;cursor:pointer}`;
       doc.head.appendChild(layout);
     }
     for (const entry of [...(snapshot.prelude ?? []), snapshot.entry]) await new Promise<void>((resolve, reject) => {
@@ -136,6 +140,17 @@ export async function bootStoryPlayer(opts: FrameBootOptions): Promise<FrameBoot
     const health = { globals: ["StoryPlayer", "loadContext", "collectManifest", "mount"], engineScriptCount: Object.keys(snapshot.modules).length, assetDomains: domains };
     if (opts.mode === "manifest") return { manifest, health };
     win.__arkstageMount();
+    const controlsToggle = doc.createElement("button");
+    controlsToggle.className = "arkstage-controls-toggle";
+    controlsToggle.textContent = "显示控制";
+    controlsToggle.setAttribute("aria-expanded", "false");
+    controlsToggle.onclick = () => {
+      const expanded = doc.body.classList.toggle("arkstage-controls-open");
+      controlsToggle.textContent = expanded ? "隐藏控制" : "显示控制";
+      controlsToggle.setAttribute("aria-expanded", String(expanded));
+    };
+    // Stay inside the upstream fullscreen element so the toggle remains reachable.
+    doc.querySelector(".story-player")?.appendChild(controlsToggle);
     // AutoStart creates the renderer before preloading completes. Wait for the
     // runtime to actually start so visible boot errors can trigger rollback.
     const deadline = Date.now() + 120_000;
